@@ -168,8 +168,8 @@ export function DynamicLighting({ maxDepthY = 100 }: { maxDepthY?: number }) {
     const depthT = Math.min(1, camDepth / maxDepthY);
 
     if (ambientRef.current) {
-      ambientRef.current.intensity = THREE.MathUtils.lerp(0.55, 0.12, depthT);
-      const color = new THREE.Color('#7aa2dc').lerp(new THREE.Color('#020b18'), depthT);
+      ambientRef.current.intensity = THREE.MathUtils.lerp(0.55, 0.38, depthT);
+      const color = new THREE.Color('#7aa2dc').lerp(new THREE.Color('#082f49'), depthT);
       ambientRef.current.color = color;
     }
 
@@ -181,7 +181,7 @@ export function DynamicLighting({ maxDepthY = 100 }: { maxDepthY?: number }) {
 
     if (camLightRef.current) {
       camLightRef.current.position.copy(camera.position);
-      camLightRef.current.intensity = depthT * 1.5; // Submarine headlight
+      camLightRef.current.intensity = depthT * 4.0; // Powerful ROV survey headlight
     }
   });
 
@@ -189,7 +189,7 @@ export function DynamicLighting({ maxDepthY = 100 }: { maxDepthY?: number }) {
     <>
       <ambientLight ref={ambientRef} intensity={0.55} color="#7aa2dc" />
       <directionalLight ref={dirRef} position={[100, 32, -80]} intensity={2.8} color="#fff2e2" />
-      <pointLight ref={camLightRef} color="#22d3ee" distance={40} decay={2} intensity={0} />
+      <pointLight ref={camLightRef} color="#7dd3fc" distance={70} decay={1.4} intensity={0} />
     </>
   );
 }

@@ -24,8 +24,8 @@ function lerp(a: number, b: number, t: number): number {
 const COLOR_10M   = new THREE.Color('#0891b2'); // 10m: Bright turquoise/cyan
 const COLOR_50M   = new THREE.Color('#0c3b6d'); // 50m: Deep oceanic blue
 const COLOR_100M  = new THREE.Color('#082245'); // 100m: Twilight dark navy
-const COLOR_500M  = new THREE.Color('#041224'); // 500m: Midnight deep blue
-const COLOR_1000M = new THREE.Color('#01060e'); // 1000m: Pitch black abyssal navy
+const COLOR_500M  = new THREE.Color('#061c38'); // 500m: Midnight deep blue
+const COLOR_1000M = new THREE.Color('#03172e'); // 1000m: Deep atmospheric oceanic navy (visible, rich blue)
 
 function getDepthColor(t: number): THREE.Color {
   // t is camDepth / maxDepthY where 1.0 is maximum seabed depth (t in [0, 1])
@@ -154,7 +154,7 @@ export function UnderwaterEnvironment({ depth, visible, maxDepthY = 100 }: Under
       fogColorRef.current.copy(fogColor);
       scene.background = fogColor;
       expFog.color.copy(fogColor);
-      expFog.density = lerp(0.015, 0.04, depthT);
+      expFog.density = lerp(0.012, 0.018, depthT);
     } else {
       // Above surface: clear sky dome view with soft distant horizon haze
       scene.background = null;
