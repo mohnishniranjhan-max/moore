@@ -157,8 +157,8 @@ void main() {
   vec3 finalColor = mix(waterColor, skyHorizon, horizonBlend);
 
   // 9. Natural water opacity: increases with fresnel reflection at glancing angles
-  float surfaceAlpha = mix(0.52, 0.96, fresnel);
-  float alpha = mix(surfaceAlpha, 0.68, uUnderwater);
+  float surfaceAlpha = mix(0.90, 1.0, fresnel);
+  float alpha = mix(surfaceAlpha, 0.82, uUnderwater);
   alpha = mix(alpha, 1.0, horizonBlend);
 
   // 10. Underwater Underside Reflection
