@@ -212,7 +212,7 @@ export function WaveSurface({ waveHeight, modelWaveHeight, currentSpeed, tempera
   waterNormals.wrapS = waterNormals.wrapT = THREE.RepeatWrapping;
 
   const geometry = useMemo(() => {
-    const geo = new THREE.PlaneGeometry(2000, 2000, 128, 128);
+    const geo = new THREE.PlaneGeometry(2000, 2000, 64, 64);
     geo.rotateX(-Math.PI / 2);
     return geo;
   }, []);

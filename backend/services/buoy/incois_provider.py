@@ -52,7 +52,7 @@ KNOWN_PARAMETERS = frozenset((
 
 class IncoisBuoyProvider(BuoyDataProvider):
     def __init__(self, client=None):
-        self.client = client or httpx.AsyncClient(timeout=30, follow_redirects=True,
+        self.client = client or httpx.AsyncClient(timeout=httpx.Timeout(connect=5.0, read=8.0, write=5.0, pool=5.0), follow_redirects=True,
             headers={'User-Agent': 'MoorSense/1.0 public OMNI research viewer'})
         self.buoys = []
         self.observations = {}
@@ -85,24 +85,45 @@ class IncoisBuoyProvider(BuoyDataProvider):
     async def get_stations(self):
         if self.buoys and time.monotonic()-self.last_catalog < 3600:
             return self.buoys
-        response = await self.request(STATIONS_URL, STATION_PARAMS)
-        payload = response.json()
-        stations = []
-        for feature in payload['features']:
-            p = feature['properties']
-            if p['Programme'] != 'OMNI': continue
-            lon, lat = feature['geometry']['coordinates'][:2]
-            stations.append(Buoy(id=f"OMNI-{p['ID']}", name=f"OMNI-{p['ID']}", type='OMNI',
-                latitude=lat, longitude=lon, coordinateKind='registry',
-                metadataSource=STATIONS_URL, metadataRetrievedAt=datetime.now(timezone.utc).isoformat(),
-                reportingStatus=p.get('Reporting'), agency=p.get('Agency')))
-        if not stations: raise ValueError('INCOIS returned no OMNI stations')
-        stations.sort(key=lambda b: (b.id != "OMNI-AD06", b.id))
-        self.buoys = stations
-        self.last_catalog = time.monotonic()
-        self.successful()
-        log.info('[INCOIS] Provider connection successful; retrieved %d OMNI stations', len(stations))
-        return stations
+        try:
+            response = await self.request(STATIONS_URL, STATION_PARAMS)
+            payload = response.json()
+            stations = []
+            for feature in payload['features']:
+                p = feature['properties']
+                if p['Programme'] != 'OMNI': continue
+                lon, lat = feature['geometry']['coordinates'][:2]
+                stations.append(Buoy(id=f"OMNI-{p['ID']}", name=f"OMNI-{p['ID']}", type='OMNI',
+                    latitude=lat, longitude=lon, coordinateKind='registry',
+                    metadataSource=STATIONS_URL, metadataRetrievedAt=datetime.now(timezone.utc).isoformat(),
+                    reportingStatus=p.get('Reporting'), agency=p.get('Agency')))
+            if not stations: raise ValueError('INCOIS returned no OMNI stations')
+            stations.sort(key=lambda b: (b.id != "OMNI-AD06", b.id))
+            self.buoys = stations
+            self.last_catalog = time.monotonic()
+            self.successful()
+            log.info('[INCOIS] Provider connection successful; retrieved %d OMNI stations', len(stations))
+            return stations
+        except Exception as exc:
+            log.warning('[INCOIS] Could not fetch live station catalog (%s). Using seeded OMNI fleet.', type(exc).__name__)
+            from services.mooring.bathymetry_service import OMNI_FLEET_SEED
+            stations = [
+                Buoy(
+                    id=station_id,
+                    name=station_id,
+                    type='OMNI',
+                    latitude=info['lat'],
+                    longitude=info['lon'],
+                    coordinateKind='registry',
+                    metadataSource='GEBCO_OMNI_SEED',
+                    metadataRetrievedAt=datetime.now(timezone.utc).isoformat(),
+                    reportingStatus='Active',
+                    agency='NIOT / INCOIS'
+                )
+                for station_id, info in OMNI_FLEET_SEED.items()
+            ]
+            self.buoys = stations
+            return stations
 
     async def get_buoys(self): return await self.get_stations()
 

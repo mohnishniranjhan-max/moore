@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { X } from 'lucide-react';
+import { X, Compass, CircleDot } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import type { BuoyLocation, Metric } from '../../services/buoy/buoyTypes';
 import { useBuoyTelemetry } from '../../services/buoy/useBuoyTelemetry';
@@ -214,7 +214,17 @@ function MooringSection({ buoyId }: { buoyId: string }) {
   </>;
 }
 
-export function BuoyDetailsPanel({ buoy, onClose }: { buoy: BuoyLocation | null; onClose: () => void }) {
+export function BuoyDetailsPanel({
+  buoy,
+  onClose,
+  onExploreOcean,
+  onOpenWatchCircle,
+}: {
+  buoy: BuoyLocation | null;
+  onClose: () => void;
+  onExploreOcean?: (buoy: BuoyLocation) => void;
+  onOpenWatchCircle?: (buoy: BuoyLocation) => void;
+}) {
   const { detail, history, historyStatus, loading, error, websocketStatus } = useBuoyTelemetry(buoy);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 15000); return () => clearInterval(timer); }, []);
@@ -240,6 +250,80 @@ export function BuoyDetailsPanel({ buoy, onClose }: { buoy: BuoyLocation | null;
     <div className={`buoy-state state-${freshness.toLowerCase().replace('_', '-')}`}><i/>{!timestamp && (loading || detail?.providerStatus === 'CONNECTING') ? 'CONNECTING…' : unavailable ? 'SOURCE UNAVAILABLE' : !timestamp ? 'WAITING FOR DATA' : freshness.replace(/_/g, ' ')}</div>
     <p className="buoy-source">{detail?.source ?? 'NIOT / INCOIS'}{detail?.providerStatus ? ` · SOURCE ${detail.providerStatus.replace('SOURCE_', '').replace('_', ' ')}` : ''}</p>
     <p className="buoy-caption">LAST OBSERVATION · UTC<br/>{timestamp ? new Date(timestamp).toLocaleString('en-GB', {timeZone: 'UTC'}) : 'Not available'}</p>
+    
+    {/* 🌊 ACTION BUTTONS: 3D DIVE & WATCH CIRCLE ── */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '10px', marginBottom: '12px' }}>
+      {onOpenWatchCircle && (
+        <button
+          onClick={() => onOpenWatchCircle(metadata)}
+          style={{
+            width: '100%',
+            padding: '9px 12px',
+            background: 'linear-gradient(135deg, rgba(34, 211, 238, 0.25) 0%, rgba(14, 116, 144, 0.5) 100%)',
+            border: '1px solid rgba(34, 211, 238, 0.7)',
+            borderRadius: '6px',
+            color: '#38bdf8',
+            fontFamily: 'monospace',
+            fontSize: '9.5px',
+            fontWeight: 700,
+            letterSpacing: '0.12em',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '7px',
+            boxShadow: '0 0 16px rgba(34, 211, 238, 0.25)',
+            transition: 'all 0.2s ease',
+          }}
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLElement).style.background = 'linear-gradient(135deg, rgba(34, 211, 238, 0.45) 0%, rgba(14, 116, 144, 0.7) 100%)';
+            (e.currentTarget as HTMLElement).style.borderColor = '#22d3ee';
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLElement).style.background = 'linear-gradient(135deg, rgba(34, 211, 238, 0.25) 0%, rgba(14, 116, 144, 0.5) 100%)';
+            (e.currentTarget as HTMLElement).style.borderColor = 'rgba(34, 211, 238, 0.7)';
+          }}
+        >
+          <CircleDot size={13} color="#22d3ee" />
+          <span>MOORING WATCH CIRCLE (3D)</span>
+        </button>
+      )}
+
+      {onExploreOcean && (
+        <button
+          onClick={() => onExploreOcean(metadata)}
+          style={{
+            width: '100%',
+            padding: '8px 12px',
+            background: 'rgba(15, 23, 42, 0.75)',
+            border: '1px solid rgba(34, 211, 238, 0.35)',
+            borderRadius: '6px',
+            color: '#94a3b8',
+            fontFamily: 'monospace',
+            fontSize: '9px',
+            fontWeight: 600,
+            letterSpacing: '0.12em',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '7px',
+            transition: 'all 0.2s ease',
+          }}
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLElement).style.background = 'rgba(34, 211, 238, 0.15)';
+            (e.currentTarget as HTMLElement).style.color = '#38bdf8';
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLElement).style.background = 'rgba(15, 23, 42, 0.75)';
+            (e.currentTarget as HTMLElement).style.color = '#94a3b8';
+          }}
+        >
+          <Compass size={12} color="#38bdf8" />
+          <span>EXPLORE OCEAN AREA (3D DIVE)</span>
+        </button>
+      )}
+    </div>
     {loading && <div className="buoy-notice" role="status">Loading latest telemetry…</div>}
     {(error || detail?.error) && <div className="buoy-notice" role="alert"><strong>{timestamp ? 'SOURCE UNAVAILABLE · VALUES STALE' : 'SOURCE UNAVAILABLE'}</strong><span>Last known values are retained when available.</span></div>}
 

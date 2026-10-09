@@ -30,34 +30,29 @@ uniform float uTime;
 varying vec3 vWorldPosition;
 varying vec3 vViewDir;
 
-// 3D Simplex-style hash & noise for smooth procedural clouds
-float hash(vec3 p) {
-  p = fract(p * 0.3183099 + 0.1);
-  p *= 17.0;
-  return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+// Optimized procedural 2D noise for clouds
+float hash2D(vec2 p) {
+  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
 }
 
-float noise(vec3 x) {
-  vec3 i = floor(x);
-  vec3 f = fract(x);
+float noise2D(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
   f = f * f * (3.0 - 2.0 * f);
-  
-  return mix(mix(mix(hash(i + vec3(0,0,0)), hash(i + vec3(1,0,0)), f.x),
-                 mix(hash(i + vec3(0,1,0)), hash(i + vec3(1,1,0)), f.x), f.y),
-             mix(mix(hash(i + vec3(0,0,1)), hash(i + vec3(1,0,1)), f.x),
-                 mix(hash(i + vec3(0,1,1)), hash(i + vec3(1,1,1)), f.x), f.y), f.z);
+  return mix(
+    mix(hash2D(i), hash2D(i + vec2(1.0, 0.0)), f.x),
+    mix(hash2D(i + vec2(0.0, 1.0)), hash2D(i + vec2(1.0, 1.0)), f.x),
+    f.y
+  );
 }
 
-// 5-octave Fractal Brownian Motion for rich cloud volumes
+// Lightweight Fractal Brownian Motion for cloud volumes
 float fbm(vec3 p) {
-  float f = 0.0;
-  float amp = 0.5;
-  for (int i = 0; i < 5; i++) {
-    f += amp * noise(p);
-    p = p * 2.02 + vec3(0.15, 0.05, 0.25);
-    amp *= 0.5;
-  }
-  return f;
+  vec2 uv = p.xz;
+  float f = 0.55 * noise2D(uv);
+  uv = uv * 2.05 + vec2(0.15, 0.25);
+  f += 0.30 * noise2D(uv);
+  return f * 1.18;
 }
 
 void main() {
@@ -132,7 +127,7 @@ void main() {
 }
 `;
 
-function CinematicSkyDome() {
+export function CinematicSkyDome() {
   const shaderRef = useRef<THREE.ShaderMaterial>(null!);
   const uniforms = useMemo(() => ({
     uSunPosition: { value: new THREE.Vector3(100, 32, -80) },
@@ -162,7 +157,7 @@ function CinematicSkyDome() {
 }
 
 // ── Dynamic Lighting ────────────────────────────────────────────────────────
-function DynamicLighting() {
+export function DynamicLighting({ maxDepthY = 100 }: { maxDepthY?: number }) {
   const { camera } = useThree();
   const ambientRef = useRef<THREE.AmbientLight>(null!);
   const dirRef = useRef<THREE.DirectionalLight>(null!);
@@ -170,7 +165,7 @@ function DynamicLighting() {
 
   useFrame(() => {
     const camDepth = Math.max(0, -camera.position.y);
-    const depthT = Math.min(1, camDepth / 100);
+    const depthT = Math.min(1, camDepth / maxDepthY);
 
     if (ambientRef.current) {
       ambientRef.current.intensity = THREE.MathUtils.lerp(0.55, 0.12, depthT);
@@ -179,8 +174,8 @@ function DynamicLighting() {
     }
 
     if (dirRef.current) {
-      // Directional (sun) light fades out completely by 40m depth
-      const sunT = Math.min(1, camDepth / 40);
+      // Directional (sun) light fades out smoothly as depth increases
+      const sunT = Math.min(1, camDepth / (maxDepthY * 0.4));
       dirRef.current.intensity = THREE.MathUtils.lerp(2.8, 0.0, sunT);
     }
 

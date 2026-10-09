@@ -204,3 +204,6 @@ $RECYCLE.BIN/
 
 # Local buoy telemetry journal
 backend/data/*.sqlite3*
+
+# Temporary satellite cloud imagery cache
+backend/data/cache/clouds/linear_rgb_cyl_*

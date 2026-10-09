@@ -4,8 +4,9 @@ import * as THREE from 'three';
 import type { DepthLevel } from '../../types/ocean';
 
 interface UnderwaterEnvironmentProps {
-  depth: DepthLevel;
+  depth: DepthLevel | number;
   visible: boolean;
+  maxDepthY?: number;
 }
 
 // ── Depth utilities ──────────────────────────────────────────────────────────
@@ -27,7 +28,7 @@ const COLOR_500M  = new THREE.Color('#041224'); // 500m: Midnight deep blue
 const COLOR_1000M = new THREE.Color('#01060e'); // 1000m: Pitch black abyssal navy
 
 function getDepthColor(t: number): THREE.Color {
-  // t is camDepth / 100 where 100 is 1000m depth (t in [0, 1])
+  // t is camDepth / maxDepthY where 1.0 is maximum seabed depth (t in [0, 1])
   if (t < 0.05) {
     // 0 to 50m
     return new THREE.Color().copy(COLOR_10M).lerp(COLOR_50M, t / 0.05);
@@ -38,7 +39,7 @@ function getDepthColor(t: number): THREE.Color {
     // 100m to 500m
     return new THREE.Color().copy(COLOR_100M).lerp(COLOR_500M, (t - 0.10) / 0.40);
   } else {
-    // 500m to 1000m
+    // 500m to 1000m+
     return new THREE.Color().copy(COLOR_500M).lerp(COLOR_1000M, (t - 0.50) / 0.50);
   }
 }
@@ -87,7 +88,7 @@ const causticFrag = /* glsl */ `
 
 // ── Component ────────────────────────────────────────────────────────────────
 
-export function UnderwaterEnvironment({ depth, visible }: UnderwaterEnvironmentProps) {
+export function UnderwaterEnvironment({ depth, visible, maxDepthY = 100 }: UnderwaterEnvironmentProps) {
   const { scene } = useThree();
   const particlesRef = useRef<THREE.Points>(null!);
   const raysGroupRef = useRef<THREE.Group>(null!);
@@ -136,30 +137,29 @@ export function UnderwaterEnvironment({ depth, visible }: UnderwaterEnvironmentP
     const t = state.clock.elapsedTime;
     const dt = Math.min(delta, 0.05);
 
-    // Compute depth fraction strictly based on camera Y
-    // Camera ranges from Y=2 (surface) down to Y=-100 (1000m)
+    // Compute depth fraction strictly based on camera Y scaled by maxDepthY
     const camDepth = Math.max(0, -camera.position.y);
-    const depthT = Math.min(1, camDepth / 100);
+    const depthT = Math.min(1, camDepth / maxDepthY);
     const master = 1.0; // Always visible in local ocean, just darkens
 
     // Update scene fog & background based on camera altitude
+    if (!scene.fog || !(scene.fog as any).isFogExp2) {
+      scene.fog = new THREE.FogExp2('#0891b2', 0.02);
+    }
+
+    const expFog = scene.fog as THREE.FogExp2;
     if (camera.position.y < 0.0) {
       // Submerged: deep underwater color and exponential depth fog
       const fogColor = getDepthColor(depthT);
       fogColorRef.current.copy(fogColor);
       scene.background = fogColor;
-      if (!scene.fog || (scene.fog as any).isFog) {
-        scene.fog = new THREE.FogExp2(fogColor.getHex(), lerp(0.015, 0.04, depthT));
-      } else {
-        (scene.fog as THREE.FogExp2).color.copy(fogColor);
-        (scene.fog as THREE.FogExp2).density = lerp(0.015, 0.04, depthT);
-      }
+      expFog.color.copy(fogColor);
+      expFog.density = lerp(0.015, 0.04, depthT);
     } else {
       // Above surface: clear sky dome view with soft distant horizon haze
       scene.background = null;
-      if (scene.fog && (scene.fog as any).isFogExp2) {
-        scene.fog = new THREE.Fog('#8ea5b8', 60, 280);
-      }
+      expFog.color.set('#7da3ba');
+      expFog.density = 0.0006;
     }
 
     // Particles — wrap around camera
@@ -182,8 +182,14 @@ export function UnderwaterEnvironment({ depth, visible }: UnderwaterEnvironmentP
         let dy = ((py - camera.position.y + halfBox) % PARTICLE_BOX + PARTICLE_BOX) % PARTICLE_BOX - halfBox;
         let dz = ((pz - camera.position.z + halfBox) % PARTICLE_BOX + PARTICLE_BOX) % PARTICLE_BOX - halfBox;
 
+        let worldY = camera.position.y + dy;
+        // Keep marine snow/plankton particles strictly submerged under sea level (Y <= -0.2)
+        if (worldY > -0.2) {
+          worldY = -0.2 - Math.abs(dy);
+        }
+
         pos.setX(i, camera.position.x + dx);
-        pos.setY(i, camera.position.y + dy);
+        pos.setY(i, worldY);
         pos.setZ(i, camera.position.z + dz);
       }
       pos.needsUpdate = true;
