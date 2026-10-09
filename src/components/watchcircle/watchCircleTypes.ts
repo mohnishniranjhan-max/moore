@@ -236,53 +236,30 @@ export function calculateMooringPhysics(
   // In low tension/calm states, buoyant S-loop expands; in storm states, line pulls tauter
   const complianceFactor = 1.0 - 0.70 * tensionRatio;
 
-  // Generate 48-point 3D continuous inverse-catenary curve with physical S-loop
-  const numPoints = 48;
+  // Generate 64-point silky-smooth continuous inverse-catenary curve with physical S-loop
+  const numPoints = 64;
   const catenaryPoints: THREE.Vector3[] = [];
   const totalDeltaY = anchor3D.y - fairlead3D.y;
 
   for (let i = 0; i <= numPoints; i++) {
-    const t = i / numPoints; // 0 at fairlead, 1 at anchor
+    const s = i / numPoints; // 0 at fairlead, 1 at anchor
 
-    // 1. Physical Vertical Profile y(t)
-    // - Zone 1 (t in [0, 0.22]): Steep descent of heavy wire rope + ADCP cage
-    // - Zone 2 (t in [0.22, 0.82]): Compliant nylon with 3 yellow buoyancy floats creating positive upward lift
-    // - Zone 3 (t in [0.82, 1.00]): Lower tether & heavy ground chain dropping to anchor top eye
-    let baseDepthFrac: number;
-    let buoyantLiftY = 0;
+    // 1. Silky-Smooth Vertical Descent y(s)
+    // Monotonic base descent with gentle sinusoidal tension shaping
+    const baseFraction = s + 0.038 * Math.sin(2 * Math.PI * s);
+    // Smooth Gaussian buoyant lift centered at the mid-water buoyancy cluster (s ≈ 0.48)
+    const buoyantLiftY = Math.sin(s * Math.PI) * Math.exp(-Math.pow((s - 0.48) / 0.18, 2)) * (totalDeltaY * -0.078 * complianceFactor);
+    const y = fairlead3D.y + (totalDeltaY * baseFraction) + buoyantLiftY;
 
-    if (t < 0.22) {
-      const u = t / 0.22;
-      baseDepthFrac = Math.pow(u, 1.15) * 0.25;
-    } else if (t < 0.82) {
-      const u = (t - 0.22) / 0.60;
-      baseDepthFrac = 0.25 + u * 0.60;
-      // Upward buoyant lift from the 3 yellow glass sphere buoyancy modules
-      buoyantLiftY = Math.sin(u * Math.PI) * (totalDeltaY * -0.09 * complianceFactor);
-    } else {
-      const u = (t - 0.82) / 0.18;
-      baseDepthFrac = 0.85 + Math.pow(u, 1.1) * 0.15;
-    }
+    // 2. Silky-Smooth Horizontal Inverse-Catenary S-Belly Profile (x(s), z(s))
+    // Outward compliant loop peaking smoothly at s ≈ 0.48, fading naturally to 0 at fairlead and anchor
+    const sLoopBelly = Math.pow(Math.sin(s * Math.PI), 1.35) * (1.55 * complianceFactor);
+    const catenarySagX = Math.sin(forceResultantAngle) * sLoopBelly;
+    const catenarySagZ = Math.cos(forceResultantAngle) * sLoopBelly;
 
-    const y = fairlead3D.y + (totalDeltaY * baseDepthFrac) + buoyantLiftY;
-
-    // 2. Physical Horizontal S-Curve Belly Profile (x(t), z(t))
-    // The positive buoyancy of the 3 floats and the 1.22 scope creates an outward S-loop
-    let sLoopFactor = 0;
-    if (t >= 0.18 && t <= 0.82) {
-      const u = (t - 0.18) / 0.64;
-      sLoopFactor = Math.pow(Math.sin(u * Math.PI), 1.25);
-    }
-
-    // Outward belly displacement in force direction
-    const loopBellyOutward = sLoopFactor * (1.65 * complianceFactor);
-    const catenarySagX = Math.sin(forceResultantAngle) * loopBellyOutward;
-    const catenarySagZ = Math.cos(forceResultantAngle) * loopBellyOutward;
-
-    // Horizontal baseline interpolation connecting fairlead to anchor
-    const lerpPower = 1.25;
-    const x = THREE.MathUtils.lerp(fairlead3D.x, anchor3D.x, Math.pow(t, lerpPower)) + catenarySagX;
-    const z = THREE.MathUtils.lerp(fairlead3D.z, anchor3D.z, Math.pow(t, lerpPower)) + catenarySagZ;
+    // Smooth power-interpolated baseline connecting fairlead to anchor eye
+    const x = THREE.MathUtils.lerp(fairlead3D.x, anchor3D.x, Math.pow(s, 1.25)) + catenarySagX;
+    const z = THREE.MathUtils.lerp(fairlead3D.z, anchor3D.z, Math.pow(s, 1.25)) + catenarySagZ;
 
     catenaryPoints.push(new THREE.Vector3(x, y, z));
   }
@@ -290,13 +267,13 @@ export function calculateMooringPhysics(
   // 6. MoorSense 3-Segment Model Breakdown (Matching NIOT OMNI Real Mooring)
   const totalLineLength_m = config.waterDepth * config.scope;
 
-  // Segment index partitions in the 48-point curve:
-  // Seg 0: indices 0 to 11 (Upper Inductive Wire Riser w/ ADCP Cage & CTD sensors)
-  // Seg 1: indices 10 to 41 (Compliant Nylon S-Tether w/ 3 Yellow Buoyancy Floats)
-  // Seg 2: indices 40 to 49 (Acoustic Release & Heavy Ground Chain to Clump Sinker)
-  const seg0_pts = catenaryPoints.slice(0, 12);
-  const seg1_pts = catenaryPoints.slice(11, 42);
-  const seg2_pts = catenaryPoints.slice(41, 49);
+  // Segment index partitions in the 64-point curve:
+  // Seg 0: indices 0 to 15 (Upper Inductive Wire Riser w/ ADCP Cage & CTD sensors, ~22% of line)
+  // Seg 1: indices 14 to 52 (Compliant Nylon S-Tether w/ 3 Yellow Buoyancy Floats, ~60% of line)
+  // Seg 2: indices 51 to 65 (Acoustic Release & Heavy Ground Chain to Clump Sinker, ~18% of line)
+  const seg0_pts = catenaryPoints.slice(0, 16);
+  const seg1_pts = catenaryPoints.slice(14, 53);
+  const seg2_pts = catenaryPoints.slice(51, 65);
 
   // Local angles relative to vertical:
   const lineAngleFairlead = Math.round((Math.atan2(horizontalTension_N, verticalTension_N) * 180) / Math.PI);
