@@ -21,10 +21,10 @@ function lerp(a: number, b: number, t: number): number {
 
 // ── 6-Stage Depth Color Palette ──────────────────────────────────────────
 
-const COLOR_10M   = new THREE.Color('#0891b2'); // 10m: Bright turquoise/cyan
-const COLOR_50M   = new THREE.Color('#0c3b6d'); // 50m: Deep oceanic blue
-const COLOR_100M  = new THREE.Color('#082245'); // 100m: Twilight dark navy
-const COLOR_500M  = new THREE.Color('#041224'); // 500m: Midnight deep blue
+const COLOR_10M   = new THREE.Color('#0a2d52'); // 10m: Deep oceanic sapphire blue
+const COLOR_50M   = new THREE.Color('#082444'); // 50m: Deep oceanic navy
+const COLOR_100M  = new THREE.Color('#05172e'); // 100m: Twilight dark navy
+const COLOR_500M  = new THREE.Color('#030e1f'); // 500m: Midnight deep blue
 const COLOR_1000M = new THREE.Color('#01060e'); // 1000m: Pitch black abyssal navy
 
 function getDepthColor(t: number): THREE.Color {
@@ -77,11 +77,13 @@ const causticFrag = /* glsl */ `
                mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), f.x), f.y);
   }
   void main() {
-    vec2 p1 = vUv * 8.0 + vec2(uTime * 0.2, uTime * 0.15);
-    vec2 p2 = vUv * 6.0 - vec2(uTime * 0.18, uTime * 0.25);
+    float dist = length(vUv - 0.5) * 2.0;
+    float edgeFade = 1.0 - smoothstep(0.4, 0.98, dist);
+    vec2 p1 = vUv * 8.0 + vec2(uTime * 0.12, uTime * 0.09);
+    vec2 p2 = vUv * 6.0 - vec2(uTime * 0.10, uTime * 0.14);
     float n = noise(p1) * noise(p2);
-    float c = pow(n, 2.0) * 3.0;
-    vec3 color = vec3(0.3, 0.75, 0.9) * c;
+    float c = pow(n, 2.0) * 2.5 * edgeFade;
+    vec3 color = vec3(0.12, 0.38, 0.62) * c;
     gl_FragColor = vec4(color, c * uOpacity);
   }
 `;
@@ -93,7 +95,7 @@ export function UnderwaterEnvironment({ depth, visible, maxDepthY = 100 }: Under
   const particlesRef = useRef<THREE.Points>(null!);
   const raysGroupRef = useRef<THREE.Group>(null!);
   const causticRef = useRef<THREE.Mesh>(null!);
-  const fogColorRef = useRef(new THREE.Color(0x0891b2));
+  const fogColorRef = useRef(new THREE.Color(0x0a2d52));
 
   const animState = useRef({
     currentDepthT: 0,
@@ -144,7 +146,7 @@ export function UnderwaterEnvironment({ depth, visible, maxDepthY = 100 }: Under
 
     // Update scene fog & background based on camera altitude
     if (!scene.fog || !(scene.fog as any).isFogExp2) {
-      scene.fog = new THREE.FogExp2('#0891b2', 0.02);
+      scene.fog = new THREE.FogExp2('#0a2d52', 0.02);
     }
 
     const expFog = scene.fog as THREE.FogExp2;

@@ -228,7 +228,7 @@ export function calculateMooringPhysics(
   const seabedY = -18;
   const anchorY = seabedY + 0.85; // Top pad eye of the heavy cylindrical sinker clump
 
-  const fairlead3D = new THREE.Vector3(buoy3D_X, buoy3D_Y - 1.15, buoy3D_Z);
+  const fairlead3D = new THREE.Vector3(buoy3D_X, buoy3D_Y - 1.95, buoy3D_Z);
   const anchor3D = new THREE.Vector3(0, anchorY, 0);
 
   // Dynamic tension ratio (relative to MBL) for physical compliance
@@ -236,44 +236,72 @@ export function calculateMooringPhysics(
   // In low tension/calm states, buoyant S-loop expands; in storm states, line pulls tauter
   const complianceFactor = 1.0 - 0.70 * tensionRatio;
 
-  // Generate 64-point silky-smooth continuous inverse-catenary curve with physical S-loop
+  // Float horizontal offset direction in 3D (primarily in +X to clearly display profile bend)
+  const floatOffsetDist = 1.40 * complianceFactor;
+  const floatDirX = Math.cos(forceResultantAngle * 0.4) * floatOffsetDist;
+  const floatDirZ = Math.sin(forceResultantAngle * 0.4) * floatOffsetDist * 0.35;
+
+  // Physical Spline Control Points matching authoritative diagram (media_1791568214529.png):
+  // 1. Upper Riser (Keel -> ADCP -> 500m Inductive Cable -> CTD): Hangs straight down
+  const pFairlead = fairlead3D.clone();
+  const pAdcp = new THREE.Vector3(buoy3D_X, buoy3D_Y - 2.85, buoy3D_Z);
+  const pCableMid = new THREE.Vector3(buoy3D_X, buoy3D_Y - 4.75, buoy3D_Z);
+  const pCtd = new THREE.Vector3(buoy3D_X, buoy3D_Y - 6.60, buoy3D_Z);
+  const pCtdBase = new THREE.Vector3(buoy3D_X, buoy3D_Y - 6.85, buoy3D_Z);
+
+  // 2. Compliant Nylon S-Loop: Dips DOWN below CTD, then loops UP to buoyant Trawl Float
+  const pUDip = new THREE.Vector3(
+    buoy3D_X + floatDirX * 0.55,
+    buoy3D_Y - 7.75, // Dips 0.9m below the CTD sensor!
+    buoy3D_Z + floatDirZ * 0.55
+  );
+  const pFloatApex = new THREE.Vector3(
+    buoy3D_X + floatDirX,
+    buoy3D_Y - 6.30, // Elevated apex held up by positive buoyancy (+1800N)
+    buoy3D_Z + floatDirZ
+  );
+
+  // 3. Deep Polypropylene Tether down to Anchor Cluster
+  const pPolyMid = new THREE.Vector3(
+    floatDirX * 0.42,
+    -11.2,
+    floatDirZ * 0.42
+  );
+  const pGlassTop = new THREE.Vector3(0, -14.60, 0);
+  const pRelease = new THREE.Vector3(0, -16.05, 0);
+  const pAnchor = anchor3D.clone();
+
+  const controlNodes = [
+    pFairlead,
+    pAdcp,
+    pCableMid,
+    pCtd,
+    pCtdBase,
+    pUDip,
+    pFloatApex,
+    pPolyMid,
+    pGlassTop,
+    pRelease,
+    pAnchor,
+  ];
+
+  const fullSpline = new THREE.CatmullRomCurve3(controlNodes, false, 'centripetal', 0.5);
   const numPoints = 64;
   const catenaryPoints: THREE.Vector3[] = [];
-  const totalDeltaY = anchor3D.y - fairlead3D.y;
-
   for (let i = 0; i <= numPoints; i++) {
-    const s = i / numPoints; // 0 at fairlead, 1 at anchor
-
-    // 1. Silky-Smooth Vertical Descent y(s)
-    // Monotonic base descent with gentle sinusoidal tension shaping
-    const baseFraction = s + 0.038 * Math.sin(2 * Math.PI * s);
-    // Smooth Gaussian buoyant lift centered at the mid-water buoyancy cluster (s ≈ 0.48)
-    const buoyantLiftY = Math.sin(s * Math.PI) * Math.exp(-Math.pow((s - 0.48) / 0.18, 2)) * (totalDeltaY * -0.078 * complianceFactor);
-    const y = fairlead3D.y + (totalDeltaY * baseFraction) + buoyantLiftY;
-
-    // 2. Silky-Smooth Horizontal Inverse-Catenary S-Belly Profile (x(s), z(s))
-    // Outward compliant loop peaking smoothly at s ≈ 0.48, fading naturally to 0 at fairlead and anchor
-    const sLoopBelly = Math.pow(Math.sin(s * Math.PI), 1.35) * (1.55 * complianceFactor);
-    const catenarySagX = Math.sin(forceResultantAngle) * sLoopBelly;
-    const catenarySagZ = Math.cos(forceResultantAngle) * sLoopBelly;
-
-    // Smooth power-interpolated baseline connecting fairlead to anchor eye
-    const x = THREE.MathUtils.lerp(fairlead3D.x, anchor3D.x, Math.pow(s, 1.25)) + catenarySagX;
-    const z = THREE.MathUtils.lerp(fairlead3D.z, anchor3D.z, Math.pow(s, 1.25)) + catenarySagZ;
-
-    catenaryPoints.push(new THREE.Vector3(x, y, z));
+    catenaryPoints.push(fullSpline.getPointAt(i / numPoints));
   }
 
-  // 6. MoorSense 3-Segment Model Breakdown (Matching NIOT OMNI Real Mooring)
+  // 6. MoorSense 3-Segment Model Breakdown (Matching Reference Diagram Sequence)
   const totalLineLength_m = config.waterDepth * config.scope;
 
   // Segment index partitions in the 64-point curve:
-  // Seg 0: indices 0 to 15 (Upper Inductive Wire Riser w/ ADCP Cage & CTD sensors, ~22% of line)
-  // Seg 1: indices 14 to 52 (Compliant Nylon S-Tether w/ 3 Yellow Buoyancy Floats, ~60% of line)
-  // Seg 2: indices 51 to 65 (Acoustic Release & Heavy Ground Chain to Clump Sinker, ~18% of line)
-  const seg0_pts = catenaryPoints.slice(0, 16);
-  const seg1_pts = catenaryPoints.slice(14, 53);
-  const seg2_pts = catenaryPoints.slice(51, 65);
+  // Seg 0: indices 0 to 22 (Upper Chain, ADCP, 500m Inductive Wire Rope w/ 9x CT & CTD Sensors)
+  // Seg 1: indices 20 to 52 (Nylon S-Loop U-bend, Trawl Float in Net & Polypropylene Rope)
+  // Seg 2: indices 50 to 65 (3x Glass Spheres, Acoustic Release & Heavy Ground Chain to Bottom Weight)
+  const seg0_pts = catenaryPoints.slice(0, 23);
+  const seg1_pts = catenaryPoints.slice(20, 53);
+  const seg2_pts = catenaryPoints.slice(50, 65);
 
   // Local angles relative to vertical:
   const lineAngleFairlead = Math.round((Math.atan2(horizontalTension_N, verticalTension_N) * 180) / Math.PI);
@@ -284,66 +312,66 @@ export function calculateMooringPhysics(
     {
       index: 0,
       id: 'upper_inductive_riser',
-      name: 'Segment 1: Upper Inductive Wire Riser (0 - 500m)',
-      material: 'Jacketed Torque-Balanced Wire Rope w/ ADCP Cage & SBE 37-IM Sensors',
-      length_m: Math.min(500, Math.round(totalLineLength_m * 0.15)),
+      name: 'Components 1-4: Upper Chain, ADCP, 500m Inductive Cable (9x CT) & CTD',
+      material: 'Stud-Link Chain, Inline ADCP Frame, Armored Inductive Cable w/ 9 Clamped CT Sensors & CTD',
+      length_m: Math.min(500, Math.round(totalLineLength_m * 0.16)),
       diameter_mm: 14,
-      mass_per_m_kg: 0.82,
-      submerged_weight_N_m: 5.6,
-      breaking_strength_kN: 165,
+      mass_per_m_kg: 0.85,
+      submerged_weight_N_m: 6.2,
+      breaking_strength_kN: 175,
       localTension_kN: fairleadTension_kN,
       localAngle_deg: lineAngleFairlead,
-      depthRange_m: [1.5, Math.min(500, Math.round(config.waterDepth * 0.18))],
-      utilization_percent: Math.round((fairleadTension_kN / 165) * 1000) / 10,
+      depthRange_m: [2.0, Math.min(500, Math.round(config.waterDepth * 0.18))],
+      utilization_percent: Math.round((fairleadTension_kN / 175) * 1000) / 10,
       provenance: {
-        source: 'NIOT OMNI Operational Mooring (Venkatesan et al., 2016)',
+        source: 'mooring_system_spec.md & Reference Schematic (media_1791568214529.png)',
         status: 'AUTHORITATIVE',
         confidence: 'HIGH',
-        notes: 'Equipped with an inline stainless-steel ADCP instrument cage at 25m depth and clamped Sea-Bird SBE 37-IM MicroCAT inductive sensor pucks (10m, 50m, 100m, 200m, 500m) transmitting real-time ocean current and CTD data up the wire rope without electrical breakouts.',
+        notes: 'Component 1 (Upper Chain below keel pad eye) -> Component 2 (Inline ADCP Cage Frame) -> Component 3 (500m Inductive Cable with 9x Clamped CT Sensors) -> Component 4 (CTD Sensor at inductive cable base). Provides electrical and inductive telemetry coupling from subsurface ocean layers to the surface buoy.',
       },
       points3D: seg0_pts,
     },
     {
       index: 1,
       id: 'compliant_s_tether',
-      name: 'Segment 2: Compliant Nylon S-Tether w/ 3 Buoyancy Floats (500 - 2,800m)',
-      material: '8-Strand Braided Compliant Nylon Rope w/ 3 Benthos Yellow Glass Floats',
-      length_m: Math.round(totalLineLength_m * 0.75),
-      diameter_mm: 30,
-      mass_per_m_kg: 0.65,
-      submerged_weight_N_m: 1.4,
-      breaking_strength_kN: 245,
+      name: 'Components 5-7: Nylon S-Loop, Trawl Float in Net & Polypropylene Rope',
+      material: 'Compliant Nylon Rope S-Loop, 5x Netted Trawl Floats (Buoyancy Cluster) & Polypropylene Rope',
+      length_m: Math.round(totalLineLength_m * 0.72),
+      diameter_mm: 28,
+      mass_per_m_kg: 0.58,
+      submerged_weight_N_m: 1.1,
+      breaking_strength_kN: 240,
       localTension_kN: Math.round((fairleadTension_kN * 0.88) * 10) / 10,
       localAngle_deg: lineAngleMid,
       depthRange_m: [Math.min(500, Math.round(config.waterDepth * 0.18)), Math.round(config.waterDepth * 0.90)],
-      utilization_percent: Math.round(((fairleadTension_kN * 0.88) / 245) * 1000) / 10,
+      utilization_percent: Math.round(((fairleadTension_kN * 0.88) / 240) * 1000) / 10,
       provenance: {
-        source: 'NIOT OMNI Mooring Architecture & Deep-Sea Standards',
+        source: 'mooring_system_spec.md & Reference Schematic (media_1791568214529.png)',
         status: 'AUTHORITATIVE',
         confidence: 'HIGH',
-        notes: 'High-compliance elastic nylon section equipped with 3 clustered Benthos 17" glass sphere buoyancy modules in high-visibility yellow protective hardhats. Generates positive net lift creating the authentic inverse-catenary S-curve belly shown in the NIOT scale model, isolating surface wave heave from the seabed anchor.',
+        notes: 'Component 5 (Nylon Rope S-Loop compliant belly) -> Component 6 (Trawl Float in Net subsurface buoyancy cluster providing +1800N upward lift) -> Component 7 (Polypropylene Rope deep synthetic tether). Decouples surface wave dynamics from seabed ground tackle.',
       },
       points3D: seg1_pts,
     },
     {
       index: 2,
       id: 'anchor_chain_assembly',
-      name: 'Segment 3: Acoustic Release & Stud-Link Ground Chain (2,800m - Seabed)',
-      material: 'Dual EdgeTech 8242XS Acoustic Release + 26mm Stud-Link Steel Chain',
-      length_m: Math.round(totalLineLength_m * 0.10),
+      name: 'Components 8-11: Glass Spheres (x3), Acoustic Release, Ground Chain & Bottom Weight',
+      material: '3x Yellow Glass Spheres, Dual Acoustic Release Transponder, Heavy Ground Chain & 2,000 kg Segmented Dead Weight',
+      length_m: Math.round(totalLineLength_m * 0.12),
       diameter_mm: 26,
-      mass_per_m_kg: 14.8,
-      submerged_weight_N_m: 125.0,
+      mass_per_m_kg: 15.2,
+      submerged_weight_N_m: 128.0,
       breaking_strength_kN: 520,
       localTension_kN: anchorTension_kN,
       localAngle_deg: lineAngleAnchor,
       depthRange_m: [Math.round(config.waterDepth * 0.90), config.waterDepth],
       utilization_percent: Math.round((anchorTension_kN / 520) * 1000) / 10,
       provenance: {
-        source: 'NIOT Deep-Sea Deployment Specification',
+        source: 'mooring_system_spec.md & Reference Schematic (media_1791568214529.png)',
         status: 'AUTHORITATIVE',
         confidence: 'HIGH',
-        notes: 'Positively buoyant tether connected to dual EdgeTech 8242XS acoustic release transponders with drop-hook mechanism, 30m of 26mm stud-link anchor chain, and 2,000 kg heavy cylindrical cast-iron clump sinker resting on the seabed floor.',
+        notes: 'Component 8 (3x Yellow Glass Spheres in hardhats) -> Component 9 (Dual Acoustic Release Transponder in purple housing) -> Component 10 (Heavy Stud-Link Ground Chain) -> Component 11 (2,000 kg Segmented Clump Dead Weight on seabed). Holds the deep acoustic transponder vertical and securely anchors the mooring.',
       },
       points3D: seg2_pts,
     },

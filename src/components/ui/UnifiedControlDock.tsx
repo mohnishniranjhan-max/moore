@@ -279,16 +279,16 @@ export function UnifiedControlDock({
               })}
             </div>
 
-            {/* India EEZ Toggle */}
+            {/* Maritime Economic Zone Toggle */}
             <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 500 }}>
-                India EEZ Overlay
+                Economic Zone {showEEZ ? '[ ON ]' : '[ OFF ]'}
               </span>
               <button
                 onClick={() => onEEZChange?.(!showEEZ)}
                 style={{
                   width: '36px', height: '20px', borderRadius: '10px',
-                  background: showEEZ ? '#38bdf8' : 'rgba(255, 255, 255, 0.1)',
+                  background: showEEZ ? '#ef4444' : 'rgba(255, 255, 255, 0.1)',
                   border: 'none', position: 'relative', cursor: 'pointer',
                   transition: 'background 0.2s ease',
                 }}

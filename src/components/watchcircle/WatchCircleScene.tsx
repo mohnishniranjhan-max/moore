@@ -159,16 +159,28 @@ export function WatchCircleScene({
 }: WatchCircleSceneProps) {
   const orbitRef = useRef<OrbitControlsImpl>(null!);
 
+  // Shared live dynamic motion ref linking buoy kinematics with the mooring line connection
+  const liveMotionRef = useRef<{
+    position: THREE.Vector3;
+    rotation: THREE.Euler;
+    keelPosition: THREE.Vector3;
+  }>({
+    position: new THREE.Vector3(buoyState.excursionX / 30, 0, buoyState.excursionZ / 30),
+    rotation: new THREE.Euler(0, 0, 0),
+    keelPosition: new THREE.Vector3(buoyState.excursionX / 30, -1.95, buoyState.excursionZ / 30),
+  });
+
   return (
     <Canvas
       camera={{ position: [6, 3.5, 12], fov: 42, near: 0.1, far: 3000 }}
       gl={{
-        antialias: false,
+        antialias: true,
         alpha: false,
         toneMapping: THREE.ACESFilmicToneMapping,
         toneMappingExposure: 1.15,
+        powerPreference: 'high-performance',
       }}
-      dpr={1}
+      dpr={[1, 2]}
       style={{ width: '100%', height: '100%', background: '#020817' }}
     >
       {/* ── Seamless 360° Infinite Ocean Sky Dome & Atmospheric Horizon ── */}
@@ -204,21 +216,25 @@ export function WatchCircleScene({
           showExcursionVector={showExcursionVector}
         />
 
-        {/* ── 3D Mooring Buoy with wave heave, pitch & roll ── */}
+        {/* ── 3D Mooring Buoy with smooth continuous wave heave, pitch & roll ── */}
         <MooringBuoy3D
           buoyState={buoyState}
           buoyId={config.buoyId}
           waveHeight={env.waveHeight}
           wavePeriod={env.wavePeriod}
+          windSpeed={env.windSpeed}
+          currentSpeed={env.currentSpeed}
+          liveMotionRef={liveMotionRef}
         />
 
-        {/* ── 3D Multi-Segment Mooring Line with Interactive Inspection ── */}
+        {/* ── 3D Multi-Segment Mooring Line with Interactive Inspection & Live Tracking ── */}
         <MooringLine3D
           catenaryPoints={catenaryPoints}
           buoyState={buoyState}
           segments={segments}
           selectedSegmentIndex={selectedSegmentIndex}
           onSelectSegment={onSelectSegment}
+          liveMotionRef={liveMotionRef}
         />
 
         {/* ── Seabed Bathymetry, Cast Anchor Sinker & Depth Scale Ruler ── */}

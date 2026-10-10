@@ -10,72 +10,88 @@ export function IndiaEEZ({ visible }: IndiaEEZProps) {
   const [geoData, setGeoData] = useState<any>(null);
 
   useEffect(() => {
-    // Fetch the authoritative GeoJSON from the public data directory.
+    // Fetch the authoritative GeoJSON from the public data directory
     fetch('/data/india_eez.geojson')
-      .then(res => res.json())
-      .then(data => setGeoData(data))
-      .catch(err => console.error("Failed to load India EEZ GeoJSON:", err));
+      .then((res) => res.json())
+      .then((data) => setGeoData(data))
+      .catch((err) => console.error('Failed to load India EEZ GeoJSON:', err));
   }, []);
 
-  const lines = useMemo(() => {
+  const eezRings = useMemo(() => {
     if (!geoData || !geoData.features) return [];
-    const newLines: THREE.Vector3[][] = [];
+    const rings: {
+      points: THREE.Vector3[];
+      curve: THREE.CatmullRomCurve3;
+      geometry: THREE.BufferGeometry;
+    }[] = [];
 
-    const processPolygon = (coordinates: any[]) => {
-      // coordinates for Polygon is array of linear rings
-      coordinates.forEach((ring: any[]) => {
-        const points: THREE.Vector3[] = [];
-        ring.forEach((coord: number[]) => {
-          const [lon, lat] = coord;
-          // Radius is just slightly above the earth (2.0) to prevent z-fighting
-          const [x, y, z] = latLonToXYZ(lat, lon, 2.002);
-          points.push(new THREE.Vector3(x, y, z));
-        });
-        if (points.length > 1) {
-            newLines.push(points);
-        }
+    const processRing = (coordList: number[][]) => {
+      const pts: THREE.Vector3[] = [];
+      coordList.forEach(([lon, lat]) => {
+        // Radius 2.012 sits precisely above Earth surface (2.000) and below buoy markers (2.025)
+        const [x, y, z] = latLonToXYZ(lat, lon, 2.012);
+        pts.push(new THREE.Vector3(x, y, z));
       });
+
+      if (pts.length > 2) {
+        const curve = new THREE.CatmullRomCurve3(pts, true, 'centripetal');
+        const geometry = new THREE.BufferGeometry().setFromPoints(pts);
+        rings.push({ points: pts, curve, geometry });
+      }
     };
 
     geoData.features.forEach((feature: any) => {
       const geom = feature.geometry;
       if (!geom) return;
       if (geom.type === 'Polygon') {
-        processPolygon(geom.coordinates);
+        geom.coordinates.forEach((ring: number[][]) => processRing(ring));
       } else if (geom.type === 'MultiPolygon') {
-        geom.coordinates.forEach((poly: any[]) => {
-          processPolygon(poly);
+        geom.coordinates.forEach((poly: number[][][]) => {
+          poly.forEach((ring: number[][]) => processRing(ring));
         });
       } else if (geom.type === 'LineString') {
-        const points: THREE.Vector3[] = [];
-        geom.coordinates.forEach((coord: number[]) => {
-          const [lon, lat] = coord;
-          const [x, y, z] = latLonToXYZ(lat, lon, 2.002);
-          points.push(new THREE.Vector3(x, y, z));
-        });
-        if (points.length > 1) {
-            newLines.push(points);
-        }
+        processRing(geom.coordinates);
       }
     });
 
-    return newLines;
+    return rings;
   }, [geoData]);
 
-  if (!visible || lines.length === 0) return null;
+  if (!visible || eezRings.length === 0) return null;
 
   return (
-    <group>
-      {lines.map((pts, i) => (
-        <mesh key={`eez-line-${i}`}>
-          <tubeGeometry args={[new THREE.CatmullRomCurve3(pts), Math.max(20, pts.length), 0.003, 8, false]} />
-          <meshBasicMaterial 
-            color="#22d3ee" 
-            transparent 
-            opacity={0.6} 
-            depthWrite={false}
-          />
-        </mesh>
+    <group name="MaritimeEconomicZones">
+      {eezRings.map((ring, idx) => (
+        <group key={`eez-boundary-${idx}`}>
+          {/* Razor-sharp 1px line loop for clean outline at distant zoom */}
+          <lineLoop geometry={ring.geometry}>
+            <lineBasicMaterial
+              color="#ff2233"
+              transparent
+              opacity={0.95}
+              depthWrite={false}
+            />
+          </lineLoop>
+
+          {/* Clean, thin 3D tubular boundary for smooth anti-aliased close-up view */}
+          <mesh>
+            <tubeGeometry
+              args={[
+                ring.curve,
+                Math.max(40, ring.points.length * 2),
+                0.0022, // Clean thin radius
+                6,
+                true, // Closed geographic loop
+              ]}
+            />
+            <meshBasicMaterial
+              color="#ef4444"
+              transparent
+              opacity={0.88}
+              depthWrite={false}
+            />
+          </mesh>
+        </group>
       ))}
     </group>
   );

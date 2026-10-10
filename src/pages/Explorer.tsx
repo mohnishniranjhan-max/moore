@@ -16,7 +16,7 @@ import type { CameraStage, Station, DepthLevel } from '../types/ocean';
 import type { BuoyLocation } from '../services/buoy/buoyTypes';
 import type { CloudMetadata } from '../services/cloudService';
 import { LocalOcean3D, LocalOceanUI } from '../components/localocean/LocalOceanScene';
-import { RotateCcw, Hand, Cloud, Compass, CircleDot } from 'lucide-react';
+import { RotateCcw, Hand, Cloud, Compass, CircleDot, Shield } from 'lucide-react';
 
 const WatchCircleLab = lazy(() => import('./WatchCircleLab'));
 
@@ -38,6 +38,9 @@ export default function Explorer({ initialStage = 'space' }: ExplorerProps) {
   // Mooring Watch Circle 3D Mode State
   const [isWatchCircleMode, setIsWatchCircleMode] = useState(false);
   const [selectedWatchBuoyId, setSelectedWatchBuoyId] = useState<string>('OMNI-BD10');
+
+  // Maritime Exclusive Economic Zone (EEZ) Overlay Toggle
+  const [showEEZ, setShowEEZ] = useState(false);
 
   // Buoy Data Layer
   const { buoys, selectedBuoy, selectedBuoyId, selectBuoy } = useBuoyData();
@@ -245,6 +248,7 @@ export default function Explorer({ initialStage = 'space' }: ExplorerProps) {
               sunPosition={sunPosition}
               depth={0}
               showWind={true}
+              showEEZ={showEEZ}
               onCloudMetadataUpdate={setCloudMeta}
             >
               <BuoyMarkersLayer
@@ -407,6 +411,47 @@ export default function Explorer({ initialStage = 'space' }: ExplorerProps) {
                 <span>OMNI BUOY NETWORK:</span>
                 <span style={{ color: '#ffffff', fontWeight: 700 }}>{buoys.length} STATIONS</span>
               </div>
+
+              {/* 🛡️ MARITIME EXCLUSIVE ECONOMIC ZONE (EEZ) TOGGLE */}
+              <button
+                onClick={() => setShowEEZ((prev) => !prev)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  background: showEEZ ? 'rgba(239, 68, 68, 0.25)' : 'rgba(15, 23, 42, 0.75)',
+                  border: `1px solid ${showEEZ ? '#ef4444' : 'rgba(239, 68, 68, 0.35)'}`,
+                  borderRadius: '4px',
+                  padding: '5px 12px',
+                  color: showEEZ ? '#fca5a5' : '#94a3b8',
+                  fontSize: '8.5px',
+                  fontWeight: 600,
+                  letterSpacing: '0.14em',
+                  fontFamily: 'monospace',
+                  cursor: 'pointer',
+                  boxShadow: showEEZ ? '0 0 14px rgba(239, 68, 68, 0.35)' : 'none',
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => {
+                  if (!showEEZ) {
+                    (e.currentTarget as HTMLElement).style.background = 'rgba(239, 68, 68, 0.15)';
+                    (e.currentTarget as HTMLElement).style.borderColor = '#ef4444';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!showEEZ) {
+                    (e.currentTarget as HTMLElement).style.background = 'rgba(15, 23, 42, 0.75)';
+                    (e.currentTarget as HTMLElement).style.borderColor = 'rgba(239, 68, 68, 0.35)';
+                  }
+                }}
+                title="Toggle maritime Exclusive Economic Zone (EEZ) boundaries on the ocean globe map"
+              >
+                <Shield size={11} color={showEEZ ? '#ef4444' : '#94a3b8'} />
+                <span>ECONOMIC ZONE</span>
+                <span style={{ fontWeight: 700, color: showEEZ ? '#ffffff' : '#64748b' }}>
+                  {showEEZ ? '[ ON ]' : '[ OFF ]'}
+                </span>
+              </button>
 
               {/* ⭕ WATCH CIRCLE 3D QUICK ACTION BUTTON */}
               <button

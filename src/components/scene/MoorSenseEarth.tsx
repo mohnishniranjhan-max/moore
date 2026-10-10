@@ -3,6 +3,7 @@ import { RealisticEarth } from './RealisticEarth';
 import { CloudLayer } from './CloudLayer';
 import { RealisticAtmosphere } from './RealisticAtmosphere';
 import { GlobalWindLayer } from './GlobalWindLayer';
+import { IndiaEEZ } from './IndiaEEZ';
 import type { WindSystemType } from '../ui/WindControlPanel';
 import type { DepthLevel } from '../../types/ocean';
 import type { CloudMetadata } from '../../services/cloudService';
@@ -13,6 +14,7 @@ export interface MoorSenseEarthProps {
   showWind?: boolean;
   activeWindSystems?: Set<WindSystemType>;
   onCloudMetadataUpdate?: (meta: CloudMetadata) => void;
+  showEEZ?: boolean;
   children?: React.ReactNode;
 }
 
@@ -36,6 +38,7 @@ export function MoorSenseEarth({
   showWind = true,
   activeWindSystems = DEFAULT_WIND_SYSTEMS,
   onCloudMetadataUpdate,
+  showEEZ = false,
   children,
 }: MoorSenseEarthProps) {
   return (
@@ -48,8 +51,10 @@ export function MoorSenseEarth({
           onMetadataUpdate={onCloudMetadataUpdate}
         />
         {showWind && <GlobalWindLayer depth={depth} activeSystems={activeWindSystems} />}
-
         <RealisticAtmosphere sunPosition={sunPosition} />
+
+        {/* Maritime Exclusive Economic Zone (EEZ) Boundary Overlay */}
+        <IndiaEEZ visible={showEEZ} />
       </Suspense>
       {/* Reusable extension slot for future real-time OMNI buoy markers, telemetry & watch circles */}
       {children}
